@@ -1,7 +1,13 @@
+import json
+from dotenv import load_dotenv
+import os
+
 from discord.ext import commands
 from discord import Intents
-import json
 from dung import Dung
+
+load_dotenv()
+TOKEN = os.getenv('DISCORD_TOKEN')
 
 intents = Intents.default()
 
@@ -11,5 +17,4 @@ with open('users.json') as f:
 
 bot.add_cog(Dung(bot, user_data))
 
-TOKEN = 'NzExNzIxNzk5NjE1Nzc0NzIw.GsWk-0.yrXYB6DnE1BqhRUlRGciq89GL9U9p1kNPo9xEs'
 bot.run(TOKEN)
