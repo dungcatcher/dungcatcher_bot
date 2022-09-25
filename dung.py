@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 
+import asyncio
 import json
 import random
 import time
@@ -154,6 +155,16 @@ class Dung(commands.Cog):
         else:
             await ctx.send("You haven't signed up for a dung account yet. Use dung signup")
 
+    async def scan_channel(self, channel):
+        messages = []
+
+        start = time.time()
+        messages += await channel.history(limit=None).flatten()
+        elapsed_time = time.time() - start
+        print(f"'{channel.name}' scan complete in {format_timespan(elapsed_time)}. Scanned {len(messages)} messages.")
+
+        return messages
+
     @commands.command()
     async def update(self, ctx):
         if str(ctx.message.author.id) in self.admins:
@@ -164,13 +175,7 @@ class Dung(commands.Cog):
                 if str(channel.type) == 'text':
                     text_channels.append(channel)
 
-            messages = []
-            for channel in text_channels:
-                channel_start = time.time()
-                channel_messages = await channel.history(limit=None).flatten()
-                messages += channel_messages
-                await ctx.send(f"'{channel.name}' scan complete in {format_timespan(time.time() - channel_start)}. Scanned {len(channel_messages)} messages.")
-                print(f"{len(messages)} messages scanned")
+            messages = await asyncio.gather(*[self.scan_channel(channel) for channel in text_channels])
 
             message_count_dict = {}
             message_count_leaderboard_dict = {}
@@ -178,7 +183,7 @@ class Dung(commands.Cog):
                 if str(message.author) not in message_count_leaderboard_dict.keys():
                     message_count_leaderboard_dict[str(message.author)] = {}
 
-                message_words = re.sub("[^\w]", " ", message.content).split()  # Get all words
+                message_words = re.sub("[^\w]", " ",  message).split()
                 message_words = [string for string in message_words if string != ""]  # Remove blank strings
 
                 for word in message_words:
