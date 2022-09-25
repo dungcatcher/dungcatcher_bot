@@ -1,10 +1,12 @@
 import discord
 from discord.ext import commands
+
 import json
 import random
 import time
 import math
 from humanfriendly import format_timespan
+import re
 
 
 def user_exists(user_id, user_data):
@@ -158,14 +160,17 @@ class Dung(commands.Cog):
             await ctx.send("Updating...")
             start = time.time()
             text_channels = []
-            for server in self.bot.guilds:
-                for channel in server.channels:
-                    if str(channel.type) == 'text':
-                        text_channels.append(channel)
+            for channel in self.bot.get_guild(741855063764631625).channels:
+                if str(channel.type) == 'text':
+                    text_channels.append(channel)
 
-            messages = None
+            messages = []
             for channel in text_channels:
-                messages = await channel.history(limit=None).flatten()
+                channel_start = time.time()
+                channel_messages = await channel.history(limit=None).flatten()
+                messages += channel_messages
+                await ctx.send(f"'{channel.name}' scan complete in {format_timespan(time.time() - channel_start)}. Scanned {len(channel_messages)} messages.")
+                print(f"{len(messages)} messages scanned")
 
             message_count_dict = {}
             message_count_leaderboard_dict = {}
@@ -173,7 +178,7 @@ class Dung(commands.Cog):
                 if str(message.author) not in message_count_leaderboard_dict.keys():
                     message_count_leaderboard_dict[str(message.author)] = {}
 
-                message_words = message.content.split(' ')
+                message_words = re.sub("[^\w]", " ", message.content).split()  # Get all words
                 message_words = [string for string in message_words if string != ""]  # Remove blank strings
 
                 for word in message_words:
@@ -190,13 +195,33 @@ class Dung(commands.Cog):
             with open('message_count_leaderboard.json', 'w') as message_count_leaderboard_file:
                 json.dump(message_count_leaderboard_dict, message_count_leaderboard_file)
 
-            await ctx.send(f"Done! That took {round(time.time() - start, 2)} seconds. Scanned {len(messages)} messages")
+            await ctx.send(f"Done! That took {format_timespan(time.time() - start)}. Scanned {len(messages)} messages")
 
     @commands.command()
     async def count(self, ctx, word, lb=None):
+        #  Say the amount of times the word has been said
         with open('message_count.json') as message_count_file:
             message_count_data = json.load(message_count_file)
         if word in message_count_data.keys():
-            await ctx.send(f"'{word}' has been sent {message_count_data[word]} times!")
+            await ctx.send(f"'{word}' has been sent {message_count_data[word]} times{':' if lb else '!'}")
         else:
             await ctx.send(f"'{word}' has never been sent")
+
+        # Show the leaderboard if requested
+        if lb == "lb" or lb == "leaderboard":
+            with open('message_count_leaderboard.json') as message_count_leaderboard_file:
+                message_count_leaderboard_data = json.load(message_count_leaderboard_file)
+            lb_msg = ""
+            word_lb_dict = {}
+            for user_key, user_values in message_count_leaderboard_data.items():
+                if word in user_values.keys():
+                    word_lb_dict[user_key] = user_values[word]
+            if word_lb_dict.keys():  # If anyone has said the word
+                word_lb_dict = sorted(word_lb_dict.items(), key=lambda x: x[1], reverse=True)
+                rank = 0
+                for word_lb_user, word_lb_amt in word_lb_dict:
+                    rank += 1
+                    lb_msg += f"**{rank}) {word_lb_user}** - {word_lb_amt} times\n"
+                    if rank >= 10:
+                        break
+                await ctx.send(lb_msg)
