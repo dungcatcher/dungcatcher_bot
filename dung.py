@@ -6,6 +6,8 @@ import json
 import random
 import time
 import math
+import os
+import string
 from humanfriendly import format_timespan
 
 
@@ -54,6 +56,28 @@ class Dung(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        with open('nfts.json') as f:
+            self.nfts = json.load(f)
+        self.update_nfts()
+
+    def update_nfts(self):
+        files = os.listdir('./nfts')
+        for file in files:
+            file_found = False
+            for nft_data in self.nfts.values():
+                if nft_data['name'] == file:
+                    file_found = True
+
+            if not file_found:
+                file_hash = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))  # 8 digit random string
+
+                nft = {'sold_to': None, 'name': file}
+                self.nfts[file_hash] = nft
+
+        with open('nfts.json', 'w') as f:
+            json.dump(self.nfts, f)
+
+        print(self.nfts)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -66,6 +90,9 @@ class Dung(commands.Cog):
         if isinstance(error, commands.CommandInvokeError):
             self.user_data["474153993602465793"]["dung"] -= 10
             await ctx.send(f"There was an error with this command. I blame Oscar, -10 dung. He now has {self.user_data['474153993602465793']['dung']} dung")
+            raise error
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send('More arguments required')
 
         # Custom errors
         if isinstance(error, NotSignedUp):
@@ -186,8 +213,49 @@ class Dung(commands.Cog):
 
     @commands.command()
     @is_signed_up()
-    async def nft(self, ctx):
-        pass
+    async def nft(self, ctx, mode, choice=None):
+        if mode == 'shop':
+            msg = ""
+            for nft_hash, nft_data in self.nfts.items():
+                msg_line = f"**{nft_hash}**: *{nft_data['name']}*"
+                if nft_data['sold_to']:
+                    user_bought = await self.bot.fetch_user(nft_data['sold_to'])
+                    msg_line = '~~' + msg_line + '~~'  # Strikeout
+                    msg_line += f' **Sold to {user_bought}**'
+                msg_line += '\n'
+                msg += msg_line
+            await ctx.send('Welcome to dung NFTs, the home of normal images of Oscar assaulting minors:')
+            await ctx.send(msg)
+        elif mode == 'buy':
+            if choice:
+                if choice in self.nfts.keys():
+                    if not self.nfts[choice]['sold_to']:
+                        if self.user_data[str(ctx.message.author.id)]['dung'] - 100 >= 0:
+                            await ctx.send(f"Thank you for purchasing *{self.nfts[choice]['name']}*. Your image will arrive in "
+                                           "your DMs shortly. -100 dung")
+                            self.user_data[str(ctx.message.author.id)]['dung'] -= 100
+                            self.nfts[choice]['sold_to'] = ctx.message.author.id
+
+                            user = await self.bot.fetch_user(ctx.message.author.id)
+                            await user.send('😁😁😁 Well done! 😁😁😁')
+                            await user.send(f"You now own *{self.nfts[choice]['name']}*!")
+
+                            with open(f'./nfts/{self.nfts[choice]["name"]}', 'rb') as f:
+                                picture = discord.File(f)
+                            await user.send(file=picture)
+                            # Save
+                            with open('nfts.json', 'w') as f:
+                                json.dump(self.nfts, f)
+                        else:
+                            await ctx.send("You don't have enough dung for this purchase")
+                    else:
+                        await ctx.send(f"This NFT has already been bought by {await self.bot.fetch_user(self.nfts[choice]['sold_to'])}")
+                else:
+                    ctx.send("That NFT doesn't exist")
+            else:
+                raise commands.MissingRequiredArgument(choice)
+        else:
+            raise commands.CommandNotFound()
 
     @commands.command()
     @is_admin()
